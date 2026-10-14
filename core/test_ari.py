@@ -251,7 +251,7 @@ class TestARICalculation(unittest.TestCase):
         self.assertLess(result["drift"], 5000)  # Drift should be close to 0
     
     def test_ari_calculation_invalid_schema(self):
-        """Test ARI with invalid schema"""
+        """Invalid schema must return a hard zero ARI."""
         agent_id = "test_agent_003"
         float_vec = [0.5] * 10
         vector = normalize_to_int32(float_vec)
@@ -259,9 +259,25 @@ class TestARICalculation(unittest.TestCase):
         
         result = self.evaluator.evaluate(agent_id, vector, valid_schema)
         
-        # With invalid schema (SI=0), RAW_ARI = 0.7*SA (no penalty at Layer 0)
-        # Should be less than 100000
-        self.assertLess(result["ari"], PoCAEvaluator.SCALING_FACTOR)
+        self.assertEqual(result["ari"], 0)
+
+    def test_obs_4_invalid_schema_short_circuits_similarity(self):
+        """OBS-4 regression: invalid schema returns zero without semantic analysis."""
+        scale = PoCAEvaluator.SCALING_FACTOR
+        evaluator = PoCAEvaluator([scale, 0, 0, 0])
+
+        def _must_not_be_called(_vector, _constitution):
+            raise RuntimeError("OBS-4 regression: similarity analysis was called")
+
+        evaluator.vector_similarity_int32 = _must_not_be_called
+        result = evaluator.evaluate(
+            agent_id="OBS-4",
+            vector=[scale, 0, 0, 0],
+            valid_schema=False,
+        )
+
+        self.assertEqual(result["ari"], 0)
+        self.assertEqual(result["drift"], scale)
     
     def test_ari_penalty_for_drift(self):
         """Test penalty calculation for semantic drift (SA < 0.68)"""
