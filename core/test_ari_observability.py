@@ -38,7 +38,9 @@ that the same record can later be compared across architectures.
 ## What this file does NOT do
 
 - It does not fix CORE-P0-001 (vector-length truncation).
-- It does not fix CORE-P0-002 (integer-division semantics).
+- It does not establish the protocol-normative division contract for CORE-P0-002;
+  the implementation records an explicit truncation-toward-zero choice, but this
+  observation remains non-normative.
 - It does not fix CORE-P0/P1-003 (rounding semantics).
 - It does not fix CORE-P1-004 (ARI range).
 - It does not fix CORE-P1-005 (divergent engines) — it observes ONE engine,
@@ -58,6 +60,7 @@ Status: CHARACTERIZATION HARNESS (RD-006)
 
 import json
 import platform
+import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -113,13 +116,13 @@ OBSERVATION_CASES = [
     {
         "id": "OBS-5",
         "description": (
-            "anti-aligned, dim 4 — exercises the negative-dividend rescale. "
-            "Observed value is integer-division-semantics dependent."
+            "anti-aligned, dim 4 — exercises negative weighted rescale "
+            "under truncation-toward-zero semantics and the upper drift clamp."
         ),
         "constitution": [-SCALE, 0, 0, 0],
         "vector": [1, 0, 0, 0],
         "valid_schema": True,
-        "touches_finding": "CORE-P0-002",
+        "touches_finding": "CORE-P0-002 / CORE-004 drift clamp",
     },
 ]
 
@@ -131,16 +134,16 @@ OBSERVATION_CASES = [
 # recorded so that any change in behaviour becomes visible. They are NOT a
 # specification, NOT approved, and NOT a statement that the values are correct.
 #
-# OBS-5 in particular is known to differ under truncating integer division
-# (Rust / C / JS would yield ari=30000, drift=100000). Neither value is
-# designated correct here; see CORE-P0-002.
+# OBS-5 records the implementation after explicitly choosing truncation
+# toward zero for signed fixed-point division and clamping drift to [0, SCALE].
+# These remain implementation observations, not protocol law.
 
 IMPLEMENTATION_DERIVED_NON_NORMATIVE = {
     "OBS-1": {"ari": 100000, "drift": 0},
     "OBS-2": {"ari": 30000, "drift": 100000},
     "OBS-3": {"ari": 100000, "drift": 0},
-    "OBS-4": {"ari": 70000, "drift": 0},
-    "OBS-5": {"ari": 29999, "drift": 100001},
+    "OBS-4": {"ari": 0, "drift": 100000},
+    "OBS-5": {"ari": 30000, "drift": 100000},
 }
 
 

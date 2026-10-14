@@ -38,6 +38,22 @@ class PoCAEvaluator:
                 f"Vector dimension mismatch: expected {expected}, got {actual}"
             )
 
+    @staticmethod
+    def _divide_toward_zero(numerator: int, denominator: int) -> int:
+        """Divide integers with truncation toward zero using integer-only operations.
+
+        This is an explicit implementation-level arithmetic rule matching the
+        signed integer-division behavior of Rust, C, and JavaScript BigInt.
+        Python's // floors negative quotients, so it must not be used where
+        cross-language fixed-point identity is required.
+        """
+        if denominator == 0:
+            raise ZeroDivisionError("fixed-point division by zero")
+        quotient = abs(numerator) // abs(denominator)
+        if (numerator < 0) != (denominator < 0):
+            return -quotient
+        return quotient
+
     def vector_similarity_int32(self, v1: List[int], v2: List[int]) -> int:
         """
         Calculate similarity between two pre-normalized int32 vectors.
@@ -59,7 +75,7 @@ class PoCAEvaluator:
         # dot(a, b) = (10^5 * a_unit) · (10^5 * b_unit) = 10^10 * dot(a_unit, b_unit)
         # We need to divide by 10^10 and multiply by 10^5 to get result in our scale
         # This is equivalent to dividing by 10^5
-        similarity = dot // self.SCALING_FACTOR
+        similarity = self._divide_toward_zero(dot, self.SCALING_FACTOR)
         
         return similarity
 
@@ -88,8 +104,20 @@ class PoCAEvaluator:
         # shorter operand and emit a plausible-looking score.
         self._validate_vector_dimension(vector)
 
-        # Structural integrity: 0 or 1 (scaled by 10^5 for consistency)
-        si = self.SCALING_FACTOR if valid_schema else 0
+        # CORE-002: invalid schema is fail-closed. Do not run semantic analysis
+        # or derive a positive ARI from an input that failed schema validation.
+        # Preserve the dimension guard above: dimension mismatches still raise
+        # ValueError and never return an ARI.
+        if not valid_schema:
+            return {
+                "ari": 0,
+                # Semantic alignment is not evaluated for invalid schema.
+                # Use the maximum in-range drift sentinel for this fail-closed result.
+                "drift": self.SCALING_FACTOR,
+            }
+
+        # Structural integrity is valid (scaled by 10^5).
+        si = self.SCALING_FACTOR
         
         # Semantic alignment (already scaled by 10^5)
         sa = self.vector_similarity_int32(vector, self.constitution)
@@ -97,18 +125,19 @@ class PoCAEvaluator:
         # RAW_ARI = 0.3*SI + 0.7*SA (all in fixed-point, no penalties)
         # (weight * si) is (30000 * 100000) or 0, divide by 10^5 to rescale
         # (weight * sa) is (70000 * sa), divide by 10^5 to rescale
-        raw_ari = (self.weight_structural * si // self.SCALING_FACTOR) + \
-                  (self.weight_semantic * sa // self.SCALING_FACTOR)
+        raw_ari = self._divide_toward_zero(
+            self.weight_structural * si, self.SCALING_FACTOR
+        ) + self._divide_toward_zero(
+            self.weight_semantic * sa, self.SCALING_FACTOR
+        )
         
         # Clamp to non-negative
         raw_ari = max(0, raw_ari)
         
-        # Drift is (1.0 - sa) in fixed-point
-        # Since sa can be negative (range: [-10^5, 10^5]), drift calculation needs clamping
-        # For positive sa: drift = 100000 - sa (ranges from 0 to 200000)
-        # For negative sa: drift = 100000 - sa (ranges from 100000 to 200000)
-        # Clamp drift to [0, 100000] to represent [0.0, 1.0]
-        drift = min(max(0, self.SCALING_FACTOR - sa), 2 * self.SCALING_FACTOR)
+        # Drift is (1.0 - sa) in fixed-point. Since sa can be negative,
+        # the raw value may exceed the representable [0, 100000] interval.
+        # Clamp explicitly to [0, SCALING_FACTOR] for a bounded measurement.
+        drift = min(max(0, self.SCALING_FACTOR - sa), self.SCALING_FACTOR)
         
         return {
             "ari": raw_ari,  # int32, scaled by 10^5 — RAW_ARI (no penalty)

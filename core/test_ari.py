@@ -251,7 +251,7 @@ class TestARICalculation(unittest.TestCase):
         self.assertLess(result["drift"], 5000)  # Drift should be close to 0
     
     def test_ari_calculation_invalid_schema(self):
-        """Test ARI with invalid schema"""
+        """Invalid schema must return a hard zero ARI."""
         agent_id = "test_agent_003"
         float_vec = [0.5] * 10
         vector = normalize_to_int32(float_vec)
@@ -259,10 +259,57 @@ class TestARICalculation(unittest.TestCase):
         
         result = self.evaluator.evaluate(agent_id, vector, valid_schema)
         
-        # With invalid schema (SI=0), RAW_ARI = 0.7*SA (no penalty at Layer 0)
-        # Should be less than 100000
-        self.assertLess(result["ari"], PoCAEvaluator.SCALING_FACTOR)
+        self.assertEqual(result["ari"], 0)
+
+    def test_obs_4_invalid_schema_short_circuits_similarity(self):
+        """CORE-002 / OBS-4 regression: invalid schema returns zero without semantic analysis."""
+        scale = PoCAEvaluator.SCALING_FACTOR
+        evaluator = PoCAEvaluator([scale, 0, 0, 0])
+
+        def _must_not_be_called(_vector, _constitution):
+            raise RuntimeError("OBS-4 regression: similarity analysis was called")
+
+        evaluator.vector_similarity_int32 = _must_not_be_called
+        result = evaluator.evaluate(
+            agent_id="OBS-4",
+            vector=[scale, 0, 0, 0],
+            valid_schema=False,
+        )
+
+        self.assertEqual(result["ari"], 0)
+        self.assertEqual(result["drift"], scale)
     
+    def test_fixed_point_signed_division_truncates_toward_zero(self):
+        """CORE-004: negative fixed-point division truncates toward zero."""
+        scale = PoCAEvaluator.SCALING_FACTOR
+        evaluator = PoCAEvaluator([scale])
+
+        self.assertEqual(evaluator._divide_toward_zero(-1, scale), 0)
+        self.assertEqual(evaluator._divide_toward_zero(-scale - 1, scale), -1)
+        self.assertEqual(evaluator._divide_toward_zero(-7, -3), 2)
+        self.assertEqual(evaluator._divide_toward_zero(7, -3), -2)
+
+        # A negative fractional quotient truncates to zero (Python // gives -1).
+        self.assertEqual(evaluator.vector_similarity_int32([-1], [1]), 0)
+        self.assertEqual(evaluator.vector_similarity_int32([1], [-1]), 0)
+
+    def test_obs_5_negative_division_and_drift_clamp(self):
+        """OBS-5 regression: weighted negative rescale and drift stay deterministic."""
+        scale = PoCAEvaluator.SCALING_FACTOR
+        evaluator = PoCAEvaluator([-scale, 0, 0, 0])
+
+        result = evaluator.evaluate(
+            agent_id="OBS-5",
+            vector=[1, 0, 0, 0],
+            valid_schema=True,
+        )
+
+        # SA = -1. Truncation toward zero makes (70000 * -1) / 100000 == 0.
+        # Raw drift = 100001, so the [0, 100000] clamp yields 100000.
+        self.assertEqual(result, {"ari": 30000, "drift": scale})
+        self.assertGreaterEqual(result["drift"], 0)
+        self.assertLessEqual(result["drift"], scale)
+
     def test_ari_penalty_for_drift(self):
         """Test penalty calculation for semantic drift (SA < 0.68)"""
         agent_id = "test_agent_004"
