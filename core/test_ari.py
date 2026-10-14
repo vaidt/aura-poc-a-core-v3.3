@@ -279,6 +279,37 @@ class TestARICalculation(unittest.TestCase):
         self.assertEqual(result["ari"], 0)
         self.assertEqual(result["drift"], scale)
     
+    def test_fixed_point_signed_division_truncates_toward_zero(self):
+        """CORE-004: negative fixed-point division truncates toward zero."""
+        scale = PoCAEvaluator.SCALING_FACTOR
+        evaluator = PoCAEvaluator([scale])
+
+        self.assertEqual(evaluator._divide_toward_zero(-1, scale), 0)
+        self.assertEqual(evaluator._divide_toward_zero(-scale - 1, scale), -1)
+        self.assertEqual(evaluator._divide_toward_zero(-7, -3), 2)
+        self.assertEqual(evaluator._divide_toward_zero(7, -3), -2)
+
+        # The similarity rescale uses the same rule (Python // would return -1).
+        self.assertEqual(evaluator.vector_similarity_int32([-1], [scale]), 0)
+        self.assertEqual(evaluator.vector_similarity_int32([1], [-scale]), 0)
+
+    def test_obs_5_negative_division_and_drift_clamp(self):
+        """OBS-5 regression: weighted negative rescale and drift stay deterministic."""
+        scale = PoCAEvaluator.SCALING_FACTOR
+        evaluator = PoCAEvaluator([-scale, 0, 0, 0])
+
+        result = evaluator.evaluate(
+            agent_id="OBS-5",
+            vector=[1, 0, 0, 0],
+            valid_schema=True,
+        )
+
+        # SA = -1. Truncation toward zero makes (70000 * -1) / 100000 == 0.
+        # Raw drift = 100001, so the [0, 100000] clamp yields 100000.
+        self.assertEqual(result, {"ari": 30000, "drift": scale})
+        self.assertGreaterEqual(result["drift"], 0)
+        self.assertLessEqual(result["drift"], scale)
+
     def test_ari_penalty_for_drift(self):
         """Test penalty calculation for semantic drift (SA < 0.68)"""
         agent_id = "test_agent_004"
