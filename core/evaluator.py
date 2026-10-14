@@ -40,7 +40,7 @@ class PoCAEvaluator:
 
     @staticmethod
     def _divide_toward_zero(numerator: int, denominator: int) -> int:
-        """Divide integers with truncation toward zero, without floating point.
+        """Divide integers with truncation toward zero using integer-only operations.
 
         This is an explicit implementation-level arithmetic rule matching the
         signed integer-division behavior of Rust, C, and JavaScript BigInt.
