@@ -38,7 +38,9 @@ that the same record can later be compared across architectures.
 ## What this file does NOT do
 
 - It does not fix CORE-P0-001 (vector-length truncation).
-- It does not fix CORE-P0-002 (integer-division semantics).
+- It does not establish the protocol-normative division contract for CORE-P0-002;
+  the implementation records an explicit truncation-toward-zero choice, but this
+  observation remains non-normative.
 - It does not fix CORE-P0/P1-003 (rounding semantics).
 - It does not fix CORE-P1-004 (ARI range).
 - It does not fix CORE-P1-005 (divergent engines) — it observes ONE engine,
