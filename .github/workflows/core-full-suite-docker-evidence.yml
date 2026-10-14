@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   full-suite:
-    name: Docker-backed full pytest suite (160 expected)
+    name: Docker-backed full pytest suite (162 expected)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -55,7 +55,7 @@ jobs:
             tail -n 30 artifacts/core-full-suite-collection.log
             exit 1
           fi
-          echo "Full suite collected: ${collected} tests (declared gate target: 160)."
+          echo "Full suite collected: ${collected} tests (declared gate target: 162)."
           echo "All collected tests will execute; count mismatch remains a separate gate."
 
       - name: Run complete suite with Docker-backed integration tests
@@ -71,17 +71,17 @@ jobs:
             exit "${result}"
           fi
 
-      - name: Enforce declared 160/160 acceptance gate
+      - name: Enforce declared 162/162 acceptance gate
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           collected="$(grep -Eo '[0-9]+ tests collected' artifacts/core-full-suite-collection.log 2>/dev/null | tail -1 | awk '{print $1}' || true)"
           passed="$(grep -Eo '[0-9]+ passed' artifacts/core-full-suite.log 2>/dev/null | tail -1 | awk '{print $1}' || true)"
-          echo "Declared target: 160 collected / 160 passed"
+          echo "Declared target: 162 collected / 162 passed"
           echo "Observed: collected=${collected:-UNAVAILABLE}, passed=${passed:-UNAVAILABLE}"
-          if [[ "${collected:-}" != "160" || "${passed:-}" != "160" ]]; then
-            echo "::error::The declared 160/160 gate is not satisfied by the current full test collection."
+          if [[ "${collected:-}" != "162" || "${passed:-}" != "162" ]]; then
+            echo "::error::The declared 162/162 gate is not satisfied by the current full test collection."
             exit 1
           fi
 
