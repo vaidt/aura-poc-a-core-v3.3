@@ -262,7 +262,7 @@ class TestARICalculation(unittest.TestCase):
         self.assertEqual(result["ari"], 0)
 
     def test_obs_4_invalid_schema_short_circuits_similarity(self):
-        """OBS-4 regression: invalid schema returns zero without semantic analysis."""
+        """CORE-002 / OBS-4 regression: invalid schema returns zero without semantic analysis."""
         scale = PoCAEvaluator.SCALING_FACTOR
         evaluator = PoCAEvaluator([scale, 0, 0, 0])
 
