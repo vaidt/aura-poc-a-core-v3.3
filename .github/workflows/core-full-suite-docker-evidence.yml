@@ -3,6 +3,7 @@ name: CORE Full Suite — Docker Evidence
 on:
   push:
     branches:
+      - main
       - validation/core-full-suite-128-docker-2026-10-14
 
 permissions:
