@@ -289,9 +289,9 @@ class TestARICalculation(unittest.TestCase):
         self.assertEqual(evaluator._divide_toward_zero(-7, -3), 2)
         self.assertEqual(evaluator._divide_toward_zero(7, -3), -2)
 
-        # The similarity rescale uses the same rule (Python // would return -1).
-        self.assertEqual(evaluator.vector_similarity_int32([-1], [scale]), 0)
-        self.assertEqual(evaluator.vector_similarity_int32([1], [-scale]), 0)
+        # A negative fractional quotient truncates to zero (Python // gives -1).
+        self.assertEqual(evaluator.vector_similarity_int32([-1], [1]), 0)
+        self.assertEqual(evaluator.vector_similarity_int32([1], [-1]), 0)
 
     def test_obs_5_negative_division_and_drift_clamp(self):
         """OBS-5 regression: weighted negative rescale and drift stay deterministic."""
