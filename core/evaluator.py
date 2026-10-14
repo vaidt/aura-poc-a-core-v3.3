@@ -88,8 +88,20 @@ class PoCAEvaluator:
         # shorter operand and emit a plausible-looking score.
         self._validate_vector_dimension(vector)
 
-        # Structural integrity: 0 or 1 (scaled by 10^5 for consistency)
-        si = self.SCALING_FACTOR if valid_schema else 0
+        # CORE-002: invalid schema is fail-closed. Do not run semantic analysis
+        # or derive a positive ARI from an input that failed schema validation.
+        # Preserve the dimension guard above: dimension mismatches still raise
+        # ValueError and never return an ARI.
+        if not valid_schema:
+            return {
+                "ari": 0,
+                # Semantic alignment is not evaluated for invalid schema.
+                # Use the maximum in-range drift sentinel for this fail-closed result.
+                "drift": self.SCALING_FACTOR,
+            }
+
+        # Structural integrity is valid (scaled by 10^5).
+        si = self.SCALING_FACTOR
         
         # Semantic alignment (already scaled by 10^5)
         sa = self.vector_similarity_int32(vector, self.constitution)
