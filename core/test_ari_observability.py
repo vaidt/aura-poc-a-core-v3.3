@@ -140,7 +140,7 @@ IMPLEMENTATION_DERIVED_NON_NORMATIVE = {
     "OBS-1": {"ari": 100000, "drift": 0},
     "OBS-2": {"ari": 30000, "drift": 100000},
     "OBS-3": {"ari": 100000, "drift": 0},
-    "OBS-4": {"ari": 70000, "drift": 0},
+    "OBS-4": {"ari": 0, "drift": 100000},
     "OBS-5": {"ari": 29999, "drift": 100001},
 }
 
