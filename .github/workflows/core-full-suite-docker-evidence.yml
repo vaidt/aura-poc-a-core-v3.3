@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest==9.0.2
 
-      - name: Collect all tests and enforce expected collection
+      - name: Collect complete pytest suite
         shell: bash
         run: |
           set -euo pipefail
@@ -49,11 +49,14 @@ jobs:
           if [[ "${result}" -ne 0 ]]; then
             exit "${result}"
           fi
-          if ! grep -Eq '^128 tests collected([[:space:]]|$)' artifacts/core-full-suite-collection.log; then
-            echo "Expected exactly 128 collected tests." >&2
+          collected="$(grep -Eo '[0-9]+ tests collected' artifacts/core-full-suite-collection.log | tail -1 | awk '{print $1}')"
+          if [[ -z "${collected}" ]]; then
+            echo "Could not determine the collected test count." >&2
             tail -n 30 artifacts/core-full-suite-collection.log
             exit 1
           fi
+          echo "Full suite collected: ${collected} tests (declared gate target: 128)."
+          echo "All collected tests will execute; count mismatch remains a separate gate."
 
       - name: Run complete suite with Docker-backed integration tests
         shell: bash
@@ -67,9 +70,18 @@ jobs:
           if [[ "${result}" -ne 0 ]]; then
             exit "${result}"
           fi
-          if ! grep -Eq '^=+[[:space:]]+128 passed([,[:space:]]|$)' artifacts/core-full-suite.log; then
-            echo "Expected 128/128 tests to pass." >&2
-            tail -n 30 artifacts/core-full-suite.log
+
+      - name: Enforce declared 128/128 acceptance gate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          collected="$(grep -Eo '[0-9]+ tests collected' artifacts/core-full-suite-collection.log 2>/dev/null | tail -1 | awk '{print $1}' || true)"
+          passed="$(grep -Eo '[0-9]+ passed' artifacts/core-full-suite.log 2>/dev/null | tail -1 | awk '{print $1}' || true)"
+          echo "Declared target: 128 collected / 128 passed"
+          echo "Observed: collected=${collected:-UNAVAILABLE}, passed=${passed:-UNAVAILABLE}"
+          if [[ "${collected:-}" != "128" || "${passed:-}" != "128" ]]; then
+            echo "::error::The declared 128/128 gate is not satisfied by the current full test collection."
             exit 1
           fi
 
