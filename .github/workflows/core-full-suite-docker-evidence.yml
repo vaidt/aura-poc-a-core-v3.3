@@ -104,3 +104,80 @@ jobs:
             artifacts/rd-006-ari-observation.json
           if-no-files-found: warn
           retention-days: 30
+
+  # CORE-003: run the real evaluator on native (not emulated) x86_64 and ARM64 hosts.
+  ari-architecture:
+    name: CORE-003 ARI/drift on ${{ matrix.expected_machine }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            expected_machine: x86_64
+          - runner: ubuntu-24.04-arm
+            expected_machine: aarch64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Execute fixed ARI/drift vectors on native architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/ari_architecture_evidence.py record \
+            --expected-machine "${{ matrix.expected_machine }}" \
+            --runner-label "${{ matrix.runner }}" \
+            --revision "${GITHUB_SHA}" \
+            --output "artifacts/ari-architecture-${{ matrix.expected_machine }}.json"
+
+      - name: Upload architecture observation
+        uses: actions/upload-artifact@v4
+        with:
+          name: ari-architecture-${{ matrix.expected_machine }}
+          path: artifacts/ari-architecture-${{ matrix.expected_machine }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  compare-ari-architecture:
+    name: CORE-003 compare actual ARI/drift outputs
+    needs: ari-architecture
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download native architecture records
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ari-architecture-*
+          path: artifacts/architecture-inputs
+          merge-multiple: true
+
+      - name: Compare full inputs and real ARI/drift outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/ari_architecture_evidence.py compare \
+            --x86 artifacts/architecture-inputs/ari-architecture-x86_64.json \
+            --arm artifacts/architecture-inputs/ari-architecture-aarch64.json \
+            --output artifacts/core-003-cross-architecture-comparison.json
+
+      - name: Upload comparison evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-003-cross-architecture-comparison
+          path: artifacts/core-003-cross-architecture-comparison.json
+          if-no-files-found: error
+          retention-days: 30
