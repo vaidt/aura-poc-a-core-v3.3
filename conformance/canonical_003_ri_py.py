@@ -71,7 +71,7 @@ def main() -> int:
     fixture_sha256 = sha256_hex(fixture_bytes)
     oracle_sha256 = sha256_hex(expected_bytes)
 
-    if expected_bytes.endswith(b"\\n"):
+    if expected_bytes.endswith(b"\n"):
         raise SystemExit("ORACLE ARTIFACT ERROR: expected JCS has a trailing LF")
     if len(expected_bytes) != EXPECTED_CANONICAL_BYTES:
         raise SystemExit(
@@ -95,7 +95,7 @@ def main() -> int:
     canonical_sha256 = sha256_hex(canonical_bytes)
 
     # RFC 6962 leaf domain uses a raw 0x00 octet, not the text "0x00".
-    leaf_preimage = b"\\x00" + canonical_bytes
+    leaf_preimage = b"\x00" + canonical_bytes
     leaf_sha256 = sha256_hex(leaf_preimage)
 
     # Bind the production method to the independently recomputed RFC 6962 digest.
@@ -177,7 +177,7 @@ def main() -> int:
     )
     report_path = artifacts / "CANONICAL-003_ri_py_execution_report.json"
     report_path.write_bytes(
-        json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8") + b"\\n"
+        json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
     )
 
     print("===== CANONICAL-003 RI-PY RAW EXECUTION REPORT =====")
