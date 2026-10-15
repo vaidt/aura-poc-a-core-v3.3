@@ -87,7 +87,7 @@ def main() -> int:
             "ORACLE ARTIFACT ERROR: expected JCS artifact length is "
             f"{len(expected_bytes)}, expected {EXPECTED_CANONICAL_BYTES}"
         )
-    if expected_bytes.endswith(b"\\n"):
+    if expected_bytes.endswith(b"\n"):
         raise SystemExit("ORACLE ARTIFACT ERROR: expected JCS bytes have a trailing LF")
     if sha256_hex(expected_bytes) != EXPECTED_CANONICAL_SHA256:
         raise SystemExit("ORACLE ARTIFACT ERROR: expected JCS artifact SHA-256 mismatch")
@@ -104,7 +104,7 @@ def main() -> int:
     core_generate_leaf = MerkleAttestor.generate_leaf(protocol_object)
     core_method_binding = core_generate_leaf == observed_sha256
 
-    leaf_preimage = b"\\x00" + observed_bytes
+    leaf_preimage = b"\x00" + observed_bytes
     observed_leaf_sha256 = sha256_hex(leaf_preimage)
 
     checks: list[dict[str, Any]] = []
@@ -223,7 +223,7 @@ def main() -> int:
     )
     report_path = artifacts / "CANONICAL-003_ri_py_execution_report.json"
     report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\\n",
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
