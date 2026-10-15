@@ -1,0 +1,43 @@
+name: CANONICAL-003 RI-PY JCS discriminator
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-003-ri-py:
+    name: Execute CANONICAL-003 against current Core serializer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AURA Core
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned specification fixture
+        uses: actions/checkout@v4
+        with:
+          repository: vaidt/aura-specification
+          ref: b3a6e784d9a6ea2e0b554310e3de80e7d13de859
+          path: aura-specification
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Execute RI-PY canonicalization discriminator
+        env:
+          AURA_SPECIFICATION_ROOT: ${{ github.workspace }}/aura-specification
+        run: python conformance/canonical_003_ri_py.py
+
+      - name: Preserve raw bytes and execution report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CANONICAL-003-RI-PY-raw-execution
+          path: artifacts/canonical-003-ri-py/
+          if-no-files-found: error
+          retention-days: 30
