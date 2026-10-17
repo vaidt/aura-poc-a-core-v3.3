@@ -126,3 +126,49 @@ jobs:
           name: determinism-comparison-result
           path: reports/
           retention-days: 30
+
+  # CORE-001: full pytest collection on a hosted Linux runner with a real Docker daemon.
+  # The two PostgreSQL integration suites start pgvector/pgvector:pg16 via docker compose.
+  full-pytest-docker:
+    name: Full pytest suite with Docker (CORE-001)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Verify Docker engine and Compose
+        run: |
+          docker --version
+          docker compose version
+          docker info
+
+      - name: Run full pytest collection
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          python -m pytest -vv --tb=short 2>&1 | tee artifacts/core-001-pytest.log
+
+      - name: Upload pytest and database evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-001-docker-pytest-${{ github.sha }}
+          path: |
+            artifacts/core-001-pytest.log
+            artifacts/db-append-only-check.log
+            artifacts/db-append-only-results.json
+            artifacts/cr-003-statelessness.log
+            artifacts/cr-003-statelessness-results.json
+            artifacts/rd-006-ari-observation.json
+          if-no-files-found: warn
+          retention-days: 30
