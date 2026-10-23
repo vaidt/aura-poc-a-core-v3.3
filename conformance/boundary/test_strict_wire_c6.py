@@ -1,43 +1,57 @@
 from __future__ import annotations
-import base64, hashlib, json, unittest
+
+import hashlib
+import json
+import unittest
+from pathlib import Path
+
 from conformance.boundary.strict_wire import parse_receipt_json, ReceiptWireError
 
-RAW=b"C6\x00\xfe\xff"
-def good():
-    return {"schema_id":"BC-02.1-COMMON-RECEIPT","schema_version":1,
-      "fixture":{"fixture_id":"FIX-C6","fixture_artifact_identity":"fixture.bin"},
-      "handoff":{"status":"TRANSFERRED","method":"local"},
-      "received":{"octet_length":len(RAW),"raw_octets":base64.b64encode(RAW).decode(),
-        "recomputed_sha256":hashlib.sha256(RAW).hexdigest()},
-      "receiver":{"receiver_id":"RI-PY","implementation_id":"impl","language":"Python","implementation_version":"1","source_commit":"abc"},
-      "adapter":{"adapter_id":"adapter","adapter_version":"1"},
-      "environment":{"environment_id":"env","platform":"linux","runtime":"python"}}
-def wire(v): return json.dumps(v,separators=(",",":"),ensure_ascii=False).encode()
+CORPUS_PATH = Path(__file__).resolve().parents[1] / "STAGE-C-C6-BC02.1-WIRE-MUTATIONS-v0.1.json"
+
+
+def apply_mutation(base: str, case: dict) -> bytes:
+    kind = case["kind"]
+    if kind == "replace":
+        find = case["find"]
+        count = base.count(find)
+        if count != 1:
+            raise AssertionError(f"{case['id']}: expected one replacement target, got {count}")
+        return base.replace(find, case["replace"], 1).encode("utf-8")
+    if kind == "literal":
+        return case["wire"].encode("utf-8")
+    if kind == "hex":
+        return bytes.fromhex(case["wire_hex"])
+    raise AssertionError(f"{case['id']}: unsupported mutation kind {kind!r}")
+
 
 class PinnedRIPyStrictWireTests(unittest.TestCase):
-    def test_accepts_valid_and_preserves_opaque_octets(self):
-        got=parse_receipt_json(wire(good()))
-        self.assertEqual(got.raw_octets,RAW)
-    def test_rejects_shared_negative_cases(self):
-        base=good()
-        cases=[]
-        v=json.loads(json.dumps(base)); v["conformance_result"]="PASS"; cases.append(v)
-        v=json.loads(json.dumps(base)); v["received"]["extension"]="x"; cases.append(v)
-        v=json.loads(json.dumps(base)); v["handoff"]["status"]="PASS"; cases.append(v)
-        v=json.loads(json.dumps(base)); v["received"]["octet_length"]=True; cases.append(v)
-        v=json.loads(json.dumps(base)); v["received"]["octet_length"]=len(RAW)-1; cases.append(v)
-        v=json.loads(json.dumps(base)); v["received"]["recomputed_sha256"]="0"*64; cases.append(v)
-        v=json.loads(json.dumps(base)); v["received"]["raw_octets"]="%%%"; cases.append(v)
-        for i,v in enumerate(cases):
-            with self.subTest(case=i), self.assertRaises(ReceiptWireError): parse_receipt_json(wire(v))
-    def test_rejects_duplicate_top_and_nested_keys(self):
-        base=wire(good()).decode()
-        for raw in (base.replace('"schema_id":"BC-02.1-COMMON-RECEIPT"','"schema_id":"bad","schema_id":"BC-02.1-COMMON-RECEIPT"'),
-                    base.replace('"method":"local"','"method":"local","method":"other"')):
-            with self.assertRaises(ReceiptWireError): parse_receipt_json(raw.encode())
-    def test_rejects_bad_envelope_but_not_bad_octets(self):
-        for raw in (b'\xff',b'{'):
-            with self.assertRaises(ReceiptWireError): parse_receipt_json(raw)
-        self.assertEqual(parse_receipt_json(wire(good())).raw_octets,RAW)
+    @classmethod
+    def setUpClass(cls):
+        cls.corpus_bytes = CORPUS_PATH.read_bytes()
+        cls.corpus = json.loads(cls.corpus_bytes)
+        if cls.corpus["schema"] != "AURA-STAGE-C6-BC02.1-WIRE-MUTATION-CORPUS/0.1":
+            raise AssertionError("unexpected C6 shared corpus schema")
+        cls.base = cls.corpus["valid_receipt_json"]
 
-if __name__ == "__main__": unittest.main(verbosity=2)
+    def test_accepts_shared_valid_receipt_and_preserves_raw_octets(self):
+        parsed = parse_receipt_json(self.base.encode("utf-8"))
+        self.assertEqual(parsed.raw_octets.hex(), self.corpus["raw_octets_hex"])
+
+    def test_rejects_every_shared_mutation(self):
+        for case in self.corpus["mutations"]:
+            with self.subTest(case=case["id"]):
+                self.assertEqual(case["expected"], "REJECT", "unexpected non-negative corpus disposition")
+                candidate = apply_mutation(self.base, case)
+                with self.assertRaises(ReceiptWireError, msg=case["id"]):
+                    parse_receipt_json(candidate)
+
+    def test_corpus_hash_is_stable_and_recordable(self):
+        digest = hashlib.sha256(self.corpus_bytes).hexdigest()
+        print(f"C6_SHARED_CORPUS_SHA256={digest}")
+        self.assertEqual(self.corpus["contract"], "BC-02.1-COMMON-RECEIPT")
+        self.assertEqual(len(self.corpus["mutations"]), 18)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
