@@ -1,0 +1,32 @@
+name: Stage C C6 RI-PY strict wire consumer experiment
+
+on:
+  push:
+    branches: ["experiment/stage-c-c6-wire-consumer-20261024"]
+    paths:
+      - "conformance/boundary/strict_wire.py"
+      - "conformance/boundary/test_strict_wire_c6.py"
+      - ".github/workflows/stage-c-c6-wire-consumer.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "conformance/boundary/strict_wire.py"
+      - "conformance/boundary/test_strict_wire_c6.py"
+      - ".github/workflows/stage-c-c6-wire-consumer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install repository-pinned dependencies
+        run: python -m pip install --disable-pip-version-check -e .
+      - name: Run strict BC-02.1 consumer tests
+        run: python -m unittest conformance.boundary.test_strict_wire_c6 -v
