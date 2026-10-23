@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from conformance.boundary.strict_wire import parse_receipt_json, ReceiptWireError
+from conformance.boundary.ri_py_receiver import consume_receipt_json as parse_receipt_json
+from conformance.boundary.strict_wire import ReceiptWireError
 
 CORPUS_PATH = Path(__file__).resolve().parents[1] / "STAGE-C-C6-BC02.1-WIRE-MUTATIONS-v0.1.json"
 
