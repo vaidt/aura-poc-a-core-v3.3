@@ -91,6 +91,19 @@ class StrictReceiptConsumerTests(unittest.TestCase):
         d = json.loads(wire()); d["received"]["octet_length"] = -1
         self.assert_code(json.dumps(d).encode(), "INVALID_VALUE")
 
+
+    def test_rejects_prohibited_result_values_in_semantic_fields(self):
+        d = json.loads(wire()); d["fixture"]["fixture_id"] = "PASS"
+        self.assert_code(json.dumps(d).encode(), "INVALID_VALUE")
+        d = json.loads(wire()); d["environment"]["platform"] = "CONFORMANT"
+        self.assert_code(json.dumps(d).encode(), "INVALID_VALUE")
+
+    def test_rejects_aliased_receiver_implementation_and_adapter_identities(self):
+        d = json.loads(wire()); d["receiver"]["implementation_id"] = d["receiver"]["receiver_id"]
+        self.assert_code(json.dumps(d).encode(), "INVALID_VALUE")
+        d = json.loads(wire()); d["adapter"]["adapter_id"] = d["receiver"]["implementation_id"]
+        self.assert_code(json.dumps(d).encode(), "INVALID_VALUE")
+
     def test_rejects_base64_length_and_digest_mutations(self):
         d = json.loads(wire()); d["received"]["raw_octets"] = "a@@="
         self.assert_code(json.dumps(d).encode(), "INVALID_BASE64")
