@@ -35,6 +35,16 @@ class StrictReceiptConsumerTests(unittest.TestCase):
         self.assertEqual(parsed.received.recomputed_sha256, hashlib.sha256(OCTETS).hexdigest())
         self.assertEqual(parsed.handoff.status, HandoffStatus.TRANSFERRED)
 
+    def test_empty_raw_octets_are_valid_and_use_empty_base64(self):
+        receipt = BoundaryReceiver(
+            ReceiverIdentity("RI-PY", "aura-ri-py", "1.0.0", "c6-test-commit"),
+            AdapterIdentity("c6-adapter", "1.0.0"),
+            EnvironmentIdentity("c6-env", "linux", "python"),
+        ).receive(FixtureIdentity("FIX-C6-EMPTY", "empty.bin"), "in-memory", b"")
+        parsed = parse_receipt_json(serialize_receipt(receipt))
+        self.assertEqual(parsed.received.raw_octets, b"")
+        self.assertEqual(parsed.received.octet_length, 0)
+
     def test_requires_bytes_not_mapping(self):
         self.assert_code({"schema_id": "x"}, "TYPE_MISMATCH")
 
