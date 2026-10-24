@@ -1,4 +1,14 @@
-# AURA PROTOCOL — IRON CORE v3.3
+# AURA Iron Core v3.3 — fork implementation workspace
+
+> **Repository role:** fork-specific implementation and engineering workspace for the AURA computational core.
+
+This repository is a GitHub fork of [`Aura-IDToken/aura-poc-a-core-v3.3`](https://github.com/Aura-IDToken/aura-poc-a-core-v3.3). Treat this branch as a distinct revision: test results, fixes, and claims must be tied to this repository’s exact commit rather than inherited from the parent by assumption.
+
+Implementation results are bounded to their stated source revision, build/toolchain, inputs, fixtures, and execution environment. The repository does not itself ratify protocol semantics, establish constitutional authority, or prove complete conformance.
+
+Where upstream equivalence or synchronization is claimed, provide a commit/tree comparison and a scope-specific test record. Do not infer equivalence from shared README text, version names, or fork metadata.
+
+> **Scope boundary:** this README describes implementation lineage; it does not establish that this fork is normative or a release-authorized successor.
 
 ## ⚠️ CONSTITUTIONAL GOVERNANCE
 
