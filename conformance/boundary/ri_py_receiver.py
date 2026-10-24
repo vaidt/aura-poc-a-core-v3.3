@@ -653,7 +653,6 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
 
     if document is None:
         raise ReceiptParseError("NULL_NOT_ALLOWED", "receipt must not be null")
-    _bc021_reject_forbidden_values(document)
     top = _bc021_exact_object(
         document,
         {"schema_id", "schema_version", "fixture", "handoff", "received", "receiver", "adapter", "environment"},
@@ -675,6 +674,7 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
     receiver = _bc021_exact_object(top["receiver"], {"receiver_id", "implementation_id", "language", "implementation_version", "source_commit"}, "receiver")
     adapter = _bc021_exact_object(top["adapter"], {"adapter_id", "adapter_version"}, "adapter")
     environment = _bc021_exact_object(top["environment"], {"environment_id", "platform", "runtime"}, "environment")
+    _bc021_reject_forbidden_values(document)
 
     status_text = _bc021_string(handoff["status"], "handoff.status")
     try:
