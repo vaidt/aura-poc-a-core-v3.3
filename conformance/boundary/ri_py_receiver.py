@@ -641,7 +641,8 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
         {"schema_id", "schema_version", "fixture", "handoff", "received", "receiver", "adapter", "environment"},
         "receipt",
     )
-    if top["schema_id"] != SCHEMA_ID:
+    schema_id = _bc021_string(top["schema_id"], "schema_id")
+    if schema_id != SCHEMA_ID:
         raise ReceiptParseError("SCHEMA_ID_MISMATCH", "unsupported schema_id")
     if top["schema_version"] is None:
         raise ReceiptParseError("NULL_NOT_ALLOWED", "schema_version must not be null")
@@ -671,7 +672,12 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
     if length < 0:
         raise ReceiptParseError("INVALID_VALUE", "received.octet_length must be non-negative")
 
-    encoded = _bc021_string(received["raw_octets"], "received.raw_octets")
+    encoded_value = received["raw_octets"]
+    if encoded_value is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "received.raw_octets must not be null")
+    if not isinstance(encoded_value, str):
+        raise ReceiptParseError("TYPE_MISMATCH", "received.raw_octets must be a Base64 string")
+    encoded = encoded_value  # Empty Base64 is valid for an empty octet sequence.
     try:
         encoded_ascii = encoded.encode("ascii")
         octets = base64.b64decode(encoded_ascii, validate=True)
