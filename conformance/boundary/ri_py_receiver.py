@@ -643,6 +643,8 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
     )
     if top["schema_id"] != SCHEMA_ID:
         raise ReceiptParseError("SCHEMA_ID_MISMATCH", "unsupported schema_id")
+    if top["schema_version"] is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "schema_version must not be null")
     if isinstance(top["schema_version"], bool) or not isinstance(top["schema_version"], int):
         raise ReceiptParseError("TYPE_MISMATCH", "schema_version must be a JSON integer")
     if top["schema_version"] != SCHEMA_VERSION:
@@ -662,6 +664,8 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
         raise ReceiptParseError("INVALID_VALUE", "handoff.status is outside the closed BC-02.1 domain") from exc
 
     length = received["octet_length"]
+    if length is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "received.octet_length must not be null")
     if isinstance(length, bool) or not isinstance(length, int):
         raise ReceiptParseError("TYPE_MISMATCH", "received.octet_length must be a JSON integer")
     if length < 0:
