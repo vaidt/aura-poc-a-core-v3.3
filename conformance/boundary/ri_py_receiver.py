@@ -590,6 +590,8 @@ def _bc021_reject_constant(value: str):
 
 
 def _bc021_exact_object(value: Any, required: set[str], where: str) -> Dict[str, Any]:
+    if value is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", f"{where} must not be null")
     if not isinstance(value, dict):
         raise ReceiptParseError("INVALID_SHAPE", f"{where} must be an object")
     unknown = set(value) - required
@@ -609,6 +611,19 @@ def _bc021_string(value: Any, where: str) -> str:
     if not value:
         raise ReceiptParseError("INVALID_VALUE", f"{where} must not be empty")
     return value
+
+
+def _bc021_reject_forbidden_values(value: Any, where: str = "receipt") -> None:
+    """Apply BC-02.1 R-INV-04 to every logical JSON string value."""
+    if isinstance(value, str):
+        if value.upper() in FORBIDDEN_RECEIPT_VALUES:
+            raise ReceiptParseError("INVALID_VALUE", f"{where} contains a prohibited result-authority value")
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            _bc021_reject_forbidden_values(child, f"{where}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _bc021_reject_forbidden_values(child, f"{where}[{index}]")
 
 
 def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
@@ -636,6 +651,9 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
     except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
         raise ReceiptParseError("INVALID_JSON", "receipt envelope is not valid JSON") from exc
 
+    if document is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "receipt must not be null")
+    _bc021_reject_forbidden_values(document)
     top = _bc021_exact_object(
         document,
         {"schema_id", "schema_version", "fixture", "handoff", "received", "receiver", "adapter", "environment"},
@@ -695,7 +713,7 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
     if digest != actual_digest:
         raise ReceiptParseError("DIGEST_MISMATCH", "recomputed_sha256 does not match decoded raw_octets")
 
-    return BoundaryReceipt(
+    receipt = BoundaryReceipt(
         schema_id=SCHEMA_ID,
         schema_version=SCHEMA_VERSION,
         fixture=FixtureIdentity(
@@ -721,3 +739,8 @@ def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
             runtime=_bc021_string(environment["runtime"], "environment.runtime"),
         ),
     )
+    if receipt.receiver.implementation_id == receipt.receiver.receiver_id:
+        raise ReceiptParseError("INVALID_VALUE", "implementation identity must differ from receiver identity")
+    if receipt.adapter.adapter_id in (receipt.receiver.receiver_id, receipt.receiver.implementation_id):
+        raise ReceiptParseError("INVALID_VALUE", "adapter identity must differ from receiver and implementation identities")
+    return receipt
