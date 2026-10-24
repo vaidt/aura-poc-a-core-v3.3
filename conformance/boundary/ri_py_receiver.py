@@ -561,3 +561,13 @@ def format_validation_report(results: Sequence[ValidationResult]) -> str:
         )
         for item in results
     )
+
+def consume_receipt_json(payload: bytes):
+    """Strictly consume a BC-02.1 JSON receipt envelope.
+
+    This is a wire-schema parser only. It never derives a conformance verdict
+    and does not decode or reinterpret raw artifact octets as text.
+    """
+    from .strict_wire import parse_receipt_json
+
+    return parse_receipt_json(payload)
