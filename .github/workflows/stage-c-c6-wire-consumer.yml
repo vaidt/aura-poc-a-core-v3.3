@@ -1,0 +1,74 @@
+name: Stage C C6 RI-PY strict wire consumer experiment
+
+on:
+  push:
+    branches: ["experiment/stage-c-c6-wire-consumer-20261024"]
+    paths:
+      - "conformance/boundary/strict_wire.py"
+      - "conformance/boundary/test_strict_wire_c6.py"
+      - ".github/workflows/stage-c-c6-wire-consumer.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "conformance/boundary/strict_wire.py"
+      - "conformance/boundary/test_strict_wire_c6.py"
+      - ".github/workflows/stage-c-c6-wire-consumer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-wire:
+    runs-on: ubuntu-latest
+    env:
+      AURA_SOURCE_COMMIT: ${{ github.sha }}
+      AURA_BASE_SOURCE_COMMIT: 0a8a48cc4917c5d43ecad52de6b09abb53874684
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install repository-pinned dependencies
+        run: python -m pip install --disable-pip-version-check -e .
+      - name: Run strict BC-02.1 consumer and native receipt-flow tests
+        id: strict-tests
+        run: python -m unittest conformance.boundary.test_strict_wire_c6 -v
+      - name: Preserve pinned RI-PY evidence
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.strict-tests.outcome }}
+        run: |
+          mkdir -p artifacts/c6-ri-py
+          parser_blob=$(git rev-parse "${GITHUB_SHA}:conformance/boundary/strict_wire.py")
+          receiver_blob=$(git rev-parse "${GITHUB_SHA}:conformance/boundary/ri_py_receiver.py")
+          test_blob=$(git rev-parse "${GITHUB_SHA}:conformance/boundary/test_strict_wire_c6.py")
+          corpus_sha=$(sha256sum conformance/boundary/STAGE-C-C6-BC02.1-WIRE-MUTATIONS-v0.1.json | cut -d' ' -f1)
+          cat > artifacts/c6-ri-py/implementation-evidence.json <<EOF
+          {
+            "schema": "AURA-C6-IMPLEMENTATION-EVIDENCE/0.1",
+            "component": "RI-PY",
+            "repository": "vaidt/aura-poc-a-core-v3.3",
+            "base_source_commit": "${AURA_BASE_SOURCE_COMMIT}",
+            "tested_head_sha": "${GITHUB_SHA}",
+            "source_commit_in_receipt": "${AURA_SOURCE_COMMIT}",
+            "receiver_blob_sha": "${receiver_blob}",
+            "consumer_parser_blob_sha": "${parser_blob}",
+            "test_blob_sha": "${test_blob}",
+            "shared_corpus_sha256": "${corpus_sha}",
+            "tests_outcome": "${TEST_OUTCOME}",
+            "c6_gate_status": "BLOCKED_NOT_EXECUTED",
+            "authority": "NONE",
+            "governance_effect": "NONE",
+            "release_effect": "NONE"
+          }
+          EOF
+          python -m json.tool artifacts/c6-ri-py/implementation-evidence.json >/dev/null
+      - name: Upload RI-PY experiment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c6-ri-py-evidence
+          path: artifacts/c6-ri-py/
+          if-no-files-found: error
+          retention-days: 14
