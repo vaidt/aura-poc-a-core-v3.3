@@ -5,7 +5,7 @@ Implements EU AI Act Compliance:
 - Art. 14: Manual emergency halt (Kill-Switch)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Dict, Any, Optional
 
 
@@ -90,7 +90,7 @@ class KillSwitch:
             }
 
         self._active = True
-        self._activated_at = datetime.utcnow()
+        self._activated_at = datetime.now(timezone.utc)
         self._activated_by = activated_by
         self._reason = reason
 
@@ -110,7 +110,7 @@ class KillSwitch:
             "activated_by": self._activated_by,
             "reason": self._reason,
             "deactivated_by": deactivated_by,
-            "deactivated_at": datetime.utcnow().isoformat(),
+            "deactivated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         self._active = False
