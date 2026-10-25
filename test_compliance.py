@@ -5,7 +5,7 @@ Tests Art. 5, Art. 13, and Art. 14 implementations.
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Import core modules
 from compliance.policy import PolicyRule, SystemHaltException, get_kill_switch
@@ -28,13 +28,13 @@ def test_art5_algorithmic_policy():
         print("✓ Algorithmic policy rule created successfully")
     except Exception as e:
         print(f"✗ Failed to create policy rule: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Test that non-callable raises error (Art. 5 safeguard)
     try:
         invalid_rule = PolicyRule("invalid", "not_a_function")
         print("✗ Should have rejected non-callable policy rule")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     except ValueError as e:
         print(f"✓ Correctly rejected non-callable policy: {e}")
     
@@ -43,7 +43,7 @@ def test_art5_algorithmic_policy():
     is_violated = rule.is_violated(event)
     print(f"✓ Policy violation detected: {is_violated}")
     
-    return True
+    return
 
 
 def test_art13_merkle_audit_trail():
@@ -65,13 +65,13 @@ def test_art13_merkle_audit_trail():
         print(f"✓ Merkle tree built with root: {root[:16]}...")
     except Exception as e:
         print(f"✗ Failed to build Merkle tree: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Generate Event Trust Certificate for event 1
     try:
         etc = tree.create_etc(
             leaf_index=1,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             batch_id="batch_001"
         )
         print(f"✓ Event Trust Certificate generated for leaf index 1")
@@ -80,7 +80,7 @@ def test_art13_merkle_audit_trail():
         print(f"  - Proof length: {len(etc.merkle_proof)} steps")
     except Exception as e:
         print(f"✗ Failed to generate ETC: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Verify the ETC
     try:
@@ -92,7 +92,7 @@ def test_art13_merkle_audit_trail():
             return False
     except Exception as e:
         print(f"✗ Error during ETC verification: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Test manual proof verification
     try:
@@ -106,9 +106,9 @@ def test_art13_merkle_audit_trail():
             return False
     except Exception as e:
         print(f"✗ Error during manual proof verification: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
-    return True
+    return
 
 
 def test_art14_kill_switch():
@@ -121,7 +121,7 @@ def test_art14_kill_switch():
     # Ensure it starts inactive
     if kill_switch.is_active():
         print("✗ Kill-switch should start inactive")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     print("✓ Kill-switch starts in inactive state")
     
     # Activate kill-switch
@@ -137,13 +137,13 @@ def test_art14_kill_switch():
             return False
     except Exception as e:
         print(f"✗ Error activating kill-switch: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Verify system halts
     try:
         kill_switch.assert_not_halted()
         print("✗ System should be halted but assertion passed")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     except SystemHaltException as e:
         print(f"✓ System correctly halted: {str(e)[:80]}...")
     
@@ -163,7 +163,7 @@ def test_art14_kill_switch():
         print(f"✓ Consistency calculator respects kill-switch")
     else:
         print(f"✗ Consistency calculator did not respect kill-switch: {result}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Deactivate kill-switch
     try:
@@ -175,7 +175,7 @@ def test_art14_kill_switch():
             return False
     except Exception as e:
         print(f"✗ Error deactivating kill-switch: {e}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Verify system operates normally
     result = calc.calculate(event)
@@ -183,9 +183,9 @@ def test_art14_kill_switch():
         print(f"✓ System operates normally after deactivation (score: {result['score']})")
     else:
         print(f"✗ System not operating after deactivation: {result}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
-    return True
+    return
 
 
 def test_integrated_poca_flow():
@@ -210,7 +210,7 @@ def test_integrated_poca_flow():
     # Test event
     event_content = "Help users learn about AI safety"
     event = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "embedding": embed_text(event_content),
         "content": event_content,
     }
@@ -221,7 +221,7 @@ def test_integrated_poca_flow():
         print(f"✓ Consistency score calculated: {result['score']}")
     else:
         print(f"✗ Failed to calculate consistency: {result}")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Create Event Trust Certificate (Art. 13)
     tree = MerkleTree([event_content])
@@ -231,7 +231,7 @@ def test_integrated_poca_flow():
         print(f"✓ Event Trust Certificate validated")
     else:
         print(f"✗ Event Trust Certificate invalid")
-        return False
+        raise AssertionError("Compliance check failed; see preceding diagnostic output.")
     
     # Create Aura Event Certificate
     cert = AuraEventCertificate(
@@ -247,7 +247,7 @@ def test_integrated_poca_flow():
     fingerprint = cert.fingerprint()
     print(f"✓ Aura Event Certificate created: {fingerprint[:16]}...")
     
-    return True
+    return
 
 
 def main():
@@ -266,8 +266,8 @@ def main():
     results = []
     for name, test_func in tests:
         try:
-            success = test_func()
-            results.append((name, success))
+            test_func()
+            results.append((name, True))
         except Exception as e:
             print(f"\n✗ Test '{name}' failed with exception: {e}")
             import traceback
