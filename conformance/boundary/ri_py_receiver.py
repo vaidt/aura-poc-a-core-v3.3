@@ -561,3 +561,186 @@ def format_validation_report(results: Sequence[ValidationResult]) -> str:
         )
         for item in results
     )
+
+
+# Strict BC-02.1 wire consumer. Kept separate from raw artifact intake and receipt construction.
+import re as _bc021_re
+
+
+class ReceiptParseError(ValueError):
+    """Stable, non-authoritative BC-02.1 transport rejection category."""
+
+    def __init__(self, code: str, detail: str):
+        self.code = code
+        self.detail = detail
+        super().__init__(f"{code}: {detail}")
+
+
+def _bc021_pairs_no_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ReceiptParseError("DUPLICATE_KEY", f"duplicate object member {key!r}")
+        result[key] = value
+    return result
+
+
+def _bc021_reject_constant(value: str):
+    raise ReceiptParseError("INVALID_JSON", f"non-standard JSON numeric token {value!r}")
+
+
+def _bc021_exact_object(value: Any, required: set[str], where: str) -> Dict[str, Any]:
+    if value is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", f"{where} must not be null")
+    if not isinstance(value, dict):
+        raise ReceiptParseError("INVALID_SHAPE", f"{where} must be an object")
+    unknown = set(value) - required
+    if unknown:
+        raise ReceiptParseError("UNKNOWN_FIELD", f"{where} contains {sorted(unknown)!r}")
+    missing = required - set(value)
+    if missing:
+        raise ReceiptParseError("MISSING_FIELD", f"{where} lacks {sorted(missing)!r}")
+    return value
+
+
+def _bc021_string(value: Any, where: str) -> str:
+    if value is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", f"{where} must not be null")
+    if not isinstance(value, str):
+        raise ReceiptParseError("TYPE_MISMATCH", f"{where} must be a string")
+    if not value:
+        raise ReceiptParseError("INVALID_VALUE", f"{where} must not be empty")
+    return value
+
+
+def _bc021_reject_forbidden_values(value: Any, where: str = "receipt") -> None:
+    """Apply BC-02.1 R-INV-04 to every logical JSON string value."""
+    if isinstance(value, str):
+        if value.upper() in FORBIDDEN_RECEIPT_VALUES:
+            raise ReceiptParseError("INVALID_VALUE", f"{where} contains a prohibited result-authority value")
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            _bc021_reject_forbidden_values(child, f"{where}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _bc021_reject_forbidden_values(child, f"{where}[{index}]")
+
+
+def parse_receipt_json(raw_json: bytes) -> BoundaryReceipt:
+    """Consume a complete BC-02.1 UTF-8 JSON envelope strictly.
+
+    The caller must pass the original envelope octets, not a pre-parsed mapping,
+    so duplicate-member detection occurs before object-member information is lost.
+    This parser is not used for raw artifact intake and returns no conformance result.
+    """
+    if not isinstance(raw_json, (bytes, bytearray, memoryview)):
+        raise ReceiptParseError("TYPE_MISMATCH", "receipt envelope must be supplied as raw bytes")
+    raw = bytes(raw_json)
+    try:
+        text = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ReceiptParseError("INVALID_UTF8", "receipt envelope is not valid UTF-8") from exc
+    try:
+        document = json.loads(
+            text,
+            object_pairs_hook=_bc021_pairs_no_duplicates,
+            parse_constant=_bc021_reject_constant,
+        )
+    except ReceiptParseError:
+        raise
+    except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
+        raise ReceiptParseError("INVALID_JSON", "receipt envelope is not valid JSON") from exc
+
+    if document is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "receipt must not be null")
+    top = _bc021_exact_object(
+        document,
+        {"schema_id", "schema_version", "fixture", "handoff", "received", "receiver", "adapter", "environment"},
+        "receipt",
+    )
+    schema_id = _bc021_string(top["schema_id"], "schema_id")
+    if schema_id != SCHEMA_ID:
+        raise ReceiptParseError("SCHEMA_ID_MISMATCH", "unsupported schema_id")
+    if top["schema_version"] is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "schema_version must not be null")
+    if isinstance(top["schema_version"], bool) or not isinstance(top["schema_version"], int):
+        raise ReceiptParseError("TYPE_MISMATCH", "schema_version must be a JSON integer")
+    if top["schema_version"] != SCHEMA_VERSION:
+        raise ReceiptParseError("SCHEMA_VERSION_MISMATCH", "unsupported schema_version")
+
+    fixture = _bc021_exact_object(top["fixture"], {"fixture_id", "fixture_artifact_identity"}, "fixture")
+    handoff = _bc021_exact_object(top["handoff"], {"status", "method"}, "handoff")
+    received = _bc021_exact_object(top["received"], {"octet_length", "raw_octets", "recomputed_sha256"}, "received")
+    receiver = _bc021_exact_object(top["receiver"], {"receiver_id", "implementation_id", "language", "implementation_version", "source_commit"}, "receiver")
+    adapter = _bc021_exact_object(top["adapter"], {"adapter_id", "adapter_version"}, "adapter")
+    environment = _bc021_exact_object(top["environment"], {"environment_id", "platform", "runtime"}, "environment")
+    _bc021_reject_forbidden_values(document)
+
+    status_text = _bc021_string(handoff["status"], "handoff.status")
+    try:
+        status = HandoffStatus(status_text)
+    except ValueError as exc:
+        raise ReceiptParseError("INVALID_VALUE", "handoff.status is outside the closed BC-02.1 domain") from exc
+
+    length = received["octet_length"]
+    if length is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "received.octet_length must not be null")
+    if isinstance(length, bool) or not isinstance(length, int):
+        raise ReceiptParseError("TYPE_MISMATCH", "received.octet_length must be a JSON integer")
+    if length < 0:
+        raise ReceiptParseError("INVALID_VALUE", "received.octet_length must be non-negative")
+
+    encoded_value = received["raw_octets"]
+    if encoded_value is None:
+        raise ReceiptParseError("NULL_NOT_ALLOWED", "received.raw_octets must not be null")
+    if not isinstance(encoded_value, str):
+        raise ReceiptParseError("TYPE_MISMATCH", "received.raw_octets must be a Base64 string")
+    encoded = encoded_value  # Empty Base64 is valid for an empty octet sequence.
+    try:
+        encoded_ascii = encoded.encode("ascii")
+        octets = base64.b64decode(encoded_ascii, validate=True)
+    except (UnicodeEncodeError, ValueError) as exc:
+        raise ReceiptParseError("INVALID_BASE64", "received.raw_octets is not strict Base64") from exc
+    if base64.b64encode(octets).decode("ascii") != encoded:
+        raise ReceiptParseError("INVALID_BASE64", "received.raw_octets is not canonical padded Base64")
+    if length != len(octets):
+        raise ReceiptParseError("LENGTH_MISMATCH", "octet_length differs from decoded raw_octets length")
+
+    digest = _bc021_string(received["recomputed_sha256"], "received.recomputed_sha256")
+    if _bc021_re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ReceiptParseError("INVALID_VALUE", "recomputed_sha256 must be 64 lowercase hexadecimal characters")
+    actual_digest = hashlib.sha256(octets).hexdigest()
+    if digest != actual_digest:
+        raise ReceiptParseError("DIGEST_MISMATCH", "recomputed_sha256 does not match decoded raw_octets")
+
+    receipt = BoundaryReceipt(
+        schema_id=SCHEMA_ID,
+        schema_version=SCHEMA_VERSION,
+        fixture=FixtureIdentity(
+            fixture_id=_bc021_string(fixture["fixture_id"], "fixture.fixture_id"),
+            fixture_artifact_identity=_bc021_string(fixture["fixture_artifact_identity"], "fixture.fixture_artifact_identity"),
+        ),
+        handoff=Handoff(status=status, method=_bc021_string(handoff["method"], "handoff.method")),
+        received=ReceivedMaterial(octet_length=length, raw_octets=octets, recomputed_sha256=digest),
+        receiver=ReceiverIdentity(
+            receiver_id=_bc021_string(receiver["receiver_id"], "receiver.receiver_id"),
+            implementation_id=_bc021_string(receiver["implementation_id"], "receiver.implementation_id"),
+            language=_bc021_string(receiver["language"], "receiver.language"),
+            implementation_version=_bc021_string(receiver["implementation_version"], "receiver.implementation_version"),
+            source_commit=_bc021_string(receiver["source_commit"], "receiver.source_commit"),
+        ),
+        adapter=AdapterIdentity(
+            adapter_id=_bc021_string(adapter["adapter_id"], "adapter.adapter_id"),
+            adapter_version=_bc021_string(adapter["adapter_version"], "adapter.adapter_version"),
+        ),
+        environment=EnvironmentIdentity(
+            environment_id=_bc021_string(environment["environment_id"], "environment.environment_id"),
+            platform=_bc021_string(environment["platform"], "environment.platform"),
+            runtime=_bc021_string(environment["runtime"], "environment.runtime"),
+        ),
+    )
+    if receipt.receiver.implementation_id == receipt.receiver.receiver_id:
+        raise ReceiptParseError("INVALID_VALUE", "implementation identity must differ from receiver identity")
+    if receipt.adapter.adapter_id in (receipt.receiver.receiver_id, receipt.receiver.implementation_id):
+        raise ReceiptParseError("INVALID_VALUE", "adapter identity must differ from receiver and implementation identities")
+    return receipt
